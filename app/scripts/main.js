@@ -19,49 +19,65 @@
 (function() {
   'use strict';
 
+
   var QRCodeCamera = function(element) {
     // Controls the Camera and the QRCode Module
 
     var cameraManager = new CameraManager('camera');
     var qrCodeManager = new QRCodeManager('qrcode');
+    var count = 0;
+    
+    setInterval(() => {
+      console.log('Running ' + qrCodeManager.threads + ' threads');
+    }, 500);
+    
+    var worker = new Worker('scripts/jsqrcode/qrworker.js');
+    worker.addEventListener('message', function (e) {
+      var data = e.data;
+      qrCodeManager.threads--;
 
+      // qrCodeManager.showDialog(url);
+      if (data) {
+        console.log('Deu certo', data);
+      }
+    });
 
     cameraManager.onframe = function() {
+      var img = {};
       // There is a frame in the camera, what should we do with it?
- 
-      var imageData = cameraManager.getImageData();
-      var detectedQRCode = qrCodeManager.detectQRCode(imageData, function(url) {
-        if(url !== undefined) {
-          qrCodeManager.showDialog(url);
-        }
-      });
-    
+      img.data = cameraManager.getImageData();
+
+      if (qrCodeManager.threads < 4) {
+        qrCodeManager.threads++;
+        worker.postMessage(img.data);
+      }
     };
+
   };
 
+
   var QRCodeManager = function(element) {
+    this.threads = 0;
+
     var root = document.getElementById(element);
     var canvas = document.getElementById("qr-canvas");
     var qrcodeData = root.querySelector(".QRCodeSuccessDialog-data");
     var qrcodeNavigate = root.querySelector(".QRCodeSuccessDialog-navigate");
     var qrcodeIgnore = root.querySelector(".QRCodeSuccessDialog-ignore");
-
     var client = new QRClient();
 
     var self = this;
 
     this.currentUrl = undefined;
 
+    this.detectQRCode = function(imageData) {
 
-    this.detectQRCode = function(imageData, callback) {
-      callback = callback || function() {};
-
-      client.decode(imageData, function(result) {
-        if(result !== undefined) {
-          self.currentUrl = result;
-        }
-        callback(result);
-      });
+      // client.decode(imageData, function(result) {
+      //   if(result !== undefined) {
+      //     self.currentUrl = result;
+      //   }
+      //   callback(result);
+      // });
     };
 
     this.showDialog = function(url) {
@@ -181,7 +197,6 @@
     };
 
     var captureFrame = function() {
-
       // Work out which part of the video to capture and apply to canvas.
       canvas.drawImage(cameraVideo, sx /scaleFactor, sy/scaleFactor, sWidth/scaleFactor, sHeight/scaleFactor, dx, dy, dWidth, dHeight);
 
@@ -191,6 +206,8 @@
       if(self.onframe) self.onframe();
 
       coordinatesHaveChanged = false;
+
+      window.requestAnimationFrame(captureFrame);
     };
 
     var getCamera = function(videoSource, cb) {
@@ -211,8 +228,8 @@
       else {
         params = { video: { optional: [{sourceId: videoSource.id}] } };
       }
-  
-      gUM.call(navigator, params, function(theStream) {
+      var getUserMediaNavigator = gUM.bind(navigator);
+      function success (theStream) {
         localStream = theStream;
         
         cameraVideo.onloadeddata = function(e) {
@@ -221,15 +238,14 @@
           
           var isSetup = setupVariables(e);
           if(isSetup) {
-            setInterval(captureFrame.bind(self), 4);
+            window.requestAnimationFrame(captureFrame);
           }
           else {
             // This is just to get around the fact that the videoWidth is not
             // available in Firefox until sometime after the data has loaded.
             setTimeout(function() {
               setupVariables(e);
-
-              setInterval(captureFrame.bind(self), 4);
+              window.requestAnimationFrame(captureFrame);
             }, 100);
           }
 
@@ -242,12 +258,15 @@
           }
 
           cb(videoSource);
-        };
+        }.bind(navigator);
 
         cameraVideo.src = window.URL.createObjectURL(localStream);
         cameraVideo.load();
         cameraVideo.play();
-      }, function(error) {});
+      };
+      function error (error) {};
+
+      getUserMediaNavigator(params, success, error);
     };
 
     var getSources = function(cb) {
