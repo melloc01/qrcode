@@ -20,36 +20,29 @@
   'use strict';
 
 
+  var worker = new Worker('scripts/jsqrcode/qrworker.js');
+
   var QRCodeCamera = function(element) {
     // Controls the Camera and the QRCode Module
 
     var cameraManager = new CameraManager('camera');
     var qrCodeManager = new QRCodeManager('qrcode');
-    var count = 0;
-    
-    setInterval(() => {
-      console.log('Running ' + qrCodeManager.threads + ' threads');
-    }, 500);
-    
-    var worker = new Worker('scripts/jsqrcode/qrworker.js');
+    var imgData  = null;
+
+    // Worker
     worker.addEventListener('message', function (e) {
-      var data = e.data;
+      var url = e.data;
       qrCodeManager.threads--;
 
-      // qrCodeManager.showDialog(url);
-      if (data) {
-        console.log('Deu certo', data);
+      if (url) {
+        qrCodeManager.showDialog(url);
       }
     });
 
     cameraManager.onframe = function() {
-      var img = {};
-      // There is a frame in the camera, what should we do with it?
-      img.data = cameraManager.getImageData();
-
-      if (qrCodeManager.threads < 4) {
+      if (qrCodeManager.threads < qrCodeManager.maxThreads) {
+        qrCodeManager.detectQRCode(cameraManager.getImageData());
         qrCodeManager.threads++;
-        worker.postMessage(img.data);
       }
     };
 
@@ -58,6 +51,7 @@
 
   var QRCodeManager = function(element) {
     this.threads = 0;
+    this.maxThreads = 4;
 
     var root = document.getElementById(element);
     var canvas = document.getElementById("qr-canvas");
@@ -71,13 +65,7 @@
     this.currentUrl = undefined;
 
     this.detectQRCode = function(imageData) {
-
-      // client.decode(imageData, function(result) {
-      //   if(result !== undefined) {
-      //     self.currentUrl = result;
-      //   }
-      //   callback(result);
-      // });
+      worker.postMessage(imageData);
     };
 
     this.showDialog = function(url) {

@@ -24,13 +24,9 @@ self.onmessage = function(e) {
     var width = data.width;
     var height = data.height;
     var result = qrcode.decode(width, height, data);
-
-    console.log('rolou');
-    
     postMessage(result);
   } 
   catch(e) {
-//     console.warn('Not found');
     postMessage(undefined);
   }
 
