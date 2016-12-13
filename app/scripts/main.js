@@ -36,6 +36,7 @@
 
       if (url) {
         qrCodeManager.showDialog(url);
+        qrCodeManager.currentUrl = url;
       }
     });
 
